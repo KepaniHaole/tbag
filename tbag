@@ -1,0 +1,79 @@
+#!/usr/bin/env ruby
+
+require_relative 'src/tbag/task_scheduler'
+require_relative 'src/tbag/task_parser'
+require_relative 'src/tbag/task_service'
+
+require_relative 'src/bootstrap/usage'
+require_relative 'src/bootstrap/kick_start'
+require_relative 'src/bootstrap/task_reporter'
+require_relative 'src/bootstrap/system_reporter'
+require_relative 'src/bootstrap/kill_switch'
+require_relative 'src/bootstrap/system_updater'
+require_relative 'src/bootstrap/directories'
+require_relative 'src/bootstrap/directory'
+require_relative 'src/bootstrap/pid'
+
+default_tasks_directory = Tbag::TASKS_DIRECTORY
+default_logs_directory = Tbag::LOGS_DIRECTORY
+default_trash_directory = Tbag::TRASH_DIRECTORY
+default_pid_directory = Tbag::PID_DIRECTORY
+default_pid_file = File.join default_pid_directory.path, 'tbag.pid'
+
+Tbag::Usage::print_and_exit if ARGV.length != 1
+
+pid = Tbag::Pid.new default_pid_file
+
+kick_start =
+  Tbag::KickStart.new(
+    :tasks_directory => default_tasks_directory,
+    :logs_directory  => default_logs_directory,
+    :trash_directory => default_trash_directory,
+    :pid             => pid
+  )
+
+task_reporter =
+  Tbag::TaskReporter.new(
+    :tasks_directory => default_tasks_directory,
+    :logs_directory  => default_logs_directory,
+    :pid             => pid
+  )
+
+kill_switch =
+  Tbag::KillSwitch.new(
+    :pid => pid
+  )
+
+system_reporter =
+  Tbag::SystemReporter.new(
+    :logs_directory => default_logs_directory,
+    :pid            => pid
+  )
+
+system_updater =
+  Tbag::SystemUpdater.new(
+    :working_directory => Tbag::Directory.new(:path => Dir.pwd)
+  )
+
+case ARGV[0]
+  when 'help'
+    Tbag::Usage::print_and_exit
+  when 'start'
+    kick_start.kick_start
+  when 'status'
+    task_reporter.report
+  when 'stop'
+    kill_switch.kill
+  when 'syslog'
+    system_reporter.report
+  when 'update'
+    begin
+      kill_switch.kill
+    rescue SystemExit => e
+      puts e.message
+    end
+
+    system_updater.update
+  else
+    Tbag::Usage::exit_bad_parameter ARGV[0]
+end
